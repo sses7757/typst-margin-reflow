@@ -187,6 +187,40 @@ emphasis) generally work; layout packages have not been tested. Footnote styling
 is rendered manually, so use the `footnote-entry` parameter if a package restyles
 `footnote.entry`.
 
+== Margin-note packages (e.g. marginalia)
+
+Using this package together with a margin-note package such as `marginalia` is a
+common case, but because the flow functions manage the page and change
+`page.margin` mid-page, a few precautions are needed:
+
+- Do *not* wrap the output of a flow function in `marginalia.wideblock`. A
+  wideblock computes its width from the marginalia configuration rather than from
+  the current page margins, and a multi-page wideblock does not work with
+  alternating margins.
+- Do *not* use `marginalia.wideblock` or `marginalia.header` for headers and
+  footers. Instead, align the header/footer directly from `page.margin` (a
+  broader alignment that follows the margins this package sets). A minimal
+  example adapted from the book template:
+
+  ```typ
+  #set page(header: context {
+    let m = page.margin
+    let pad-fn = if "inside" in m {
+      if calc.even(here().page()) {
+        pad.with(left: m.inside - m.outside, rest: 0pt)
+      } else {
+        pad.with(right: m.inside - m.outside, rest: 0pt)
+      }
+    } else {
+      it => it
+    }
+    pad-fn(align(end + horizon)[#counter(page).display()])
+  })
+  ```
+
+- An *empty* `marginalia.wideblock` may still be used to reserve the widened area
+  so that margin notes do not overflow into the body text.
+
 = Inspiration
 
 The idea of reflowing content mid-page comes from

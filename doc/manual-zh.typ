@@ -166,6 +166,37 @@
 使用；版式类包尚未测试。脚注是手动排版的，如果某个包重设了 `footnote.entry`，请改用
 `footnote-entry` 参数。
 
+== 旁注包（如 marginalia）
+
+本包常与 `marginalia` 等旁注包连用，但由于重排函数接管了页面并在页面中途修改
+`page.margin`，需要注意以下几点：
+
+- *不要*把本包函数的输出包在 `marginalia.wideblock` 中。wideblock 依据 marginalia
+  的配置而非当前页面页边距来计算宽度，而且多页 wideblock 在交替页边距下无法正常
+  工作。
+- *不要*用 `marginalia.wideblock` 或 `marginalia.header` 来排版页眉页脚，而应直接
+  依据 `page.margin` 对齐（一种“更广泛的对齐方式”），使其跟随本包设置的页边距。下
+  例改编自书籍模板：
+
+  ```typ
+  #set page(header: context {
+    let m = page.margin
+    let pad-fn = if "inside" in m {
+      if calc.even(here().page()) {
+        pad.with(left: m.inside - m.outside, rest: 0pt)
+      } else {
+        pad.with(right: m.inside - m.outside, rest: 0pt)
+      }
+    } else {
+      it => it
+    }
+    pad-fn(align(end + horizon)[#counter(page).display()])
+  })
+  ```
+
+- 仍可用一个*空的* `marginalia.wideblock` 来预留被加宽的区域，从而避免旁注溢出到
+  正文。
+
 = 灵感来源
 
 在页面中途重排内容的想法来自
