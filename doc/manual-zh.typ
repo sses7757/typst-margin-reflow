@@ -32,7 +32,7 @@
 }
 
 #align(center)[
-  #text(size: 26pt, weight: "bold")[margin-reflow] \
+  #text(size: 26pt, weight: "bold")[riffle] \
   #v(0.3em)
   #text(size: 14pt)[在页面中途把内容重排到新的页边距] \
   #v(0.3em)
@@ -69,7 +69,7 @@
 本包已发布在 Typst Universe：
 
 ```typ
-#import "@preview/margin-reflow:0.1.0": column-flow, single-flow, asymmetric-flow
+#import "@preview/riffle:0.1.0": column-flow, single-flow, asymmetric-flow
 ```
 
 = API 参考
@@ -204,6 +204,9 @@
 方向的重排，尤其是以往可能
 [不收敛](https://github.com/Vanille-N/meander.typ/issues/1#issuecomment-3306100761)
 的多页非对称重排，并支持中英文混排。
+
+名字 *riffle* 沿用这一河流隐喻：它指河流中水流性质改变的那一小段浅滩急流，这里指
+页面中途改变版式走向的一小段。
 
 = 许可证
 

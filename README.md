@@ -1,4 +1,4 @@
-# margin-reflow
+# riffle
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Manual](https://img.shields.io/badge/manual-English%20%7C%20Chinese-purple)](doc/manual.pdf)
@@ -9,7 +9,7 @@ Documents with asymmetric margins (a wide *outer* margin for margin notes,
 figures, or a classic book layout) sometimes need a stretch of content to use a
 different layout — for example exercise blocks laid out in two columns across the
 full symmetric width, or normal text resuming at the wide book margin after such
-a block. `margin-reflow` reflows that content **starting exactly where it
+a block. `riffle` reflows that content **starting exactly where it
 appears**, without forcing a page break, and keeps the new margins for the pages
 that follow.
 
@@ -20,18 +20,22 @@ could previously fail to
 [converge](https://github.com/Vanille-N/meander.typ/issues/1#issuecomment-3306100761),
 and on mixed CJK/Latin reflow.
 
+The name stays with the river metaphor: a *riffle* is the short stretch of a
+stream where the current changes character — here, the stretch of a page where
+the layout changes course.
+
 ## Installation
 
 The package is available on Typst Universe:
 
 ```typ
-#import "@preview/margin-reflow:0.1.0": column-flow, single-flow, asymmetric-flow
+#import "@preview/riffle:0.1.0": column-flow, single-flow, asymmetric-flow
 ```
 
 ## Quick start
 
 ```typ
-#import "@preview/margin-reflow:0.1.0": column-flow
+#import "@preview/riffle:0.1.0": column-flow
 
 #set page(margin: (inside: 1.75cm, outside: 6.45cm))
 #set par(first-line-indent: (amount: 2em, all: true), justify: true)

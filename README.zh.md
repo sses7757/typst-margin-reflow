@@ -1,4 +1,4 @@
-# margin-reflow
+# riffle
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![手册](https://img.shields.io/badge/manual-Chinese%20%7C%20English-purple)](doc/manual-zh.pdf)
@@ -7,7 +7,7 @@
 
 使用非对称页边距的文档（例如书籍版式中较宽的外侧留白，用于旁注、图片等）有时需要
 某一段内容采用不同的版式——例如让习题跨对称宽度排成两栏，或在这类内容块之后让正文
-回到书籍的宽外侧页边距。`margin-reflow` 会在内容*出现的位置*直接重排，**不强制
+回到书籍的宽外侧页边距。`riffle` 会在内容*出现的位置*直接重排，**不强制
 换页**，并让其后的页面沿用新的页边距。
 
 “在页面中途重排内容”的想法来自
@@ -16,18 +16,21 @@
 [不收敛](https://github.com/Vanille-N/meander.typ/issues/1#issuecomment-3306100761)
 的多页非对称重排，并支持中英文混排。
 
+名字沿用这一河流隐喻：*riffle* 是河流中水流性质改变的那一小段浅滩急流，这里指页面
+中途改变版式走向的一小段。
+
 ## 安装
 
 本包已发布在 Typst Universe：
 
 ```typ
-#import "@preview/margin-reflow:0.1.0": column-flow, single-flow, asymmetric-flow
+#import "@preview/riffle:0.1.0": column-flow, single-flow, asymmetric-flow
 ```
 
 ## 快速开始
 
 ```typ
-#import "@preview/margin-reflow:0.1.0": column-flow
+#import "@preview/riffle:0.1.0": column-flow
 
 #set page(margin: (inside: 1.75cm, outside: 6.45cm))
 #set par(first-line-indent: (amount: 2em, all: true), justify: true)

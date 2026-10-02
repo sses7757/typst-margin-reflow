@@ -33,7 +33,7 @@
 }
 
 #align(center)[
-  #text(size: 26pt, weight: "bold")[margin-reflow] \
+  #text(size: 26pt, weight: "bold")[riffle] \
   #v(0.3em)
   #text(size: 14pt)[Reflow content into new margins in the middle of a page] \
   #v(0.3em)
@@ -78,7 +78,7 @@ first-line indentation of the reflowed content follows the ambient
 The package is available on Typst Universe:
 
 ```typ
-#import "@preview/margin-reflow:0.1.0": column-flow, single-flow, asymmetric-flow
+#import "@preview/riffle:0.1.0": column-flow, single-flow, asymmetric-flow
 ```
 
 = API reference
@@ -229,6 +229,10 @@ the asymmetric ⇄ symmetric reflow direction and, in particular, on the multi-p
 asymmetric case that could previously fail to
 [converge](https://github.com/Vanille-N/meander.typ/issues/1#issuecomment-3306100761).
 It also supports mixed CJK and Latin reflow.
+
+The name *riffle* stays with the river metaphor: a riffle is the short stretch of
+a stream where the current changes character — here, the stretch of a page where
+the layout changes course.
 
 = License
 

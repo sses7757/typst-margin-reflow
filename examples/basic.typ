@@ -1,4 +1,4 @@
-// Minimal runnable example for margin-reflow.
+// Minimal runnable example for riffle.
 //
 // Compile with:
 //   typst compile examples/basic.typ
