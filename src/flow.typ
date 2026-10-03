@@ -1,9 +1,7 @@
 // The public flow functions.
 
 #import "content.typ": _join, _split-units
-#import "geometry.typ": (
-  _calc-content-dims, _ends-block, _get-fli, _get-padding, _is-para-break, _page-block, _page-split,
-)
+#import "geometry.typ": _calc-content-dims, _ends-block, _get-fli, _get-padding, _page-block, _page-split
 #import "footnotes.typ": _fn-area, _fn-rewrite-all, _fn-scan
 
 #let _no-indent(cont) = {
@@ -197,10 +195,10 @@
 
   // otherwise, reflow middle pages
   let _get-page-parts(p) = if "children" in p.body.body.fields() and p.body.body.children.len() > 2 {
-      (p.body.body.children.at(0), p.body.body.children.slice(2).join())
-    } else {
-      (p.body.body, [])
-    }
+    (p.body.body.children.at(0), p.body.body.children.slice(2).join())
+  } else {
+    (p.body.body, [])
+  }
   let (page-main, page-footer) = _get-page-parts(page-body)
   let page-y = measure(page-main, width: width).height + measure(page-footer, width: width).height
   while page-y >= page-avail - text.size {
@@ -220,6 +218,16 @@
   let _ = last-page-setting.remove("body")
   pad(..last-page-setting, last-main) // print last main text
   if last-footer != [] {
-    figure(caption: none, gap: 0pt, kind: "footnote", numbering: none, placement: bottom, scope: "parent", supplement: none, outlined: false, align(start, last-footer))
+    figure(
+      caption: none,
+      gap: 0pt,
+      kind: "footnote",
+      numbering: none,
+      placement: bottom,
+      scope: "parent",
+      supplement: none,
+      outlined: false,
+      align(start, last-footer),
+    )
   }
 }
