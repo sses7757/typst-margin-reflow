@@ -13,58 +13,67 @@
   value.ratio * base + value.length.to-absolute()
 }
 
-#let _page-dimensions() = {
-  (
-    width: if page.width == auto { 10000pt } else { page.width },
-    height: if page.height == auto { 10000pt } else { page.height },
-  )
-}
-
-// Resolve a page-margin specification (`auto`, a length, or a dictionary with
-// `x`/`y`/`rest`/`top`/`bottom`/`left`/`right`/`inside`/`outside`) into absolute
-// top/bottom/left/right lengths for the given page number. This mirrors Typst's
-// margin resolution (including inside/outside parity) so that an explicit target
-// margin can be measured the same way as the ambient `page.margin`.
-#let _resolve-margins(m, dims, page-no) = {
-  let auto-margin = (2.5 / 21) * calc.min(dims.width, dims.height)
-  let side(value, base) = if value == auto { auto-margin } else { _resolve-rel(value, base) }
-  let (top, bottom, left, right) = if m == auto {
-    (auto-margin, auto-margin, auto-margin, auto-margin)
-  } else if type(m) == dictionary {
-    let rest = m.at("rest", default: auto-margin)
-    let x = m.at("x", default: rest)
-    let y = m.at("y", default: rest)
-    let top = m.at("top", default: y)
-    let bottom = m.at("bottom", default: y)
-    if "left" in m or "right" in m {
-      (top, bottom, m.at("left", default: x), m.at("right", default: x))
-    } else {
-      let inside = m.at("inside", default: x)
-      let outside = m.at("outside", default: x)
-      let bind-left = page.binding == auto or page.binding == left
-      if bind-left == calc.odd(page-no) {
-        (top, bottom, inside, outside)
-      } else {
-        (top, bottom, outside, inside)
-      }
+#let _get-padding(pad-required, pn) = {
+  let (padl, padr) = if "inside" in pad-required {
+    if calc.odd(pn) { (pad-required.inside, pad-required.outside) } else {
+      (pad-required.outside, pad-required.inside)
     }
   } else {
-    (m, m, m, m)
+    (0pt, 0pt)
   }
-  (
-    top: side(top, dims.height),
-    bottom: side(bottom, dims.height),
-    left: side(left, dims.width),
-    right: side(right, dims.width),
-  )
+  pad.with(left: -padl - pad-required.left, right: -padr - pad-required.right, rest: 0pt)
 }
 
-#let _page-margins(dims) = _resolve-margins(page.margin, dims, here().page())
-
-// Rebuild a `columns` element, taking `count` out of the forwarded fields.
-#let _rebuild-columns(fields, body) = {
-  let count = if "count" in fields { fields.remove("count") } else { 2 }
-  columns(count, body, ..fields)
+#let _calc-content-dims(margin) = {
+  let dims = (width: page.width, height: page.height)
+  let current-x = if "inside" in page.margin {
+    (inside: page.margin.inside, outside: page.margin.outside)
+  } else if "left" in page.margin {
+    (left: page.margin.left, right: page.margin.right)
+  } else {
+    (left: page.margin.x, right: page.margin.x)
+  }
+  let auto-margin = (2.5 / 21) * calc.min(dims.width, dims.height)
+  let current-y = (
+    top: if "top" in page.margin { page.margin.top } else if "y" in page.margin { page.margin.y } else { auto-margin },
+    bottom: if "bottom" in page.margin { page.margin.bottom } else if "y" in page.margin { page.margin.y } else {
+      auto-margin
+    },
+  )
+  let target-margin = if type(margin) == dictionary {
+    let horizontal = (:)
+    for key in ("left", "right", "inside", "outside", "x") {
+      if key in margin { horizontal.insert(key, margin.at(key)) }
+    }
+    (top: current-y.top, bottom: current-y.bottom) + horizontal
+  } else if type(margin) == length {
+    (top: current-y.top, bottom: current-y.bottom) + (x: margin)
+  } else if margin == "symmetric" {
+    (top: current-y.top, bottom: current-y.bottom, x: calc.min(..current-x.values()))
+  } else if margin == auto {
+    page.margin
+  } else {
+    panic("margin is of unexptected type")
+  }
+  if "x" in target-margin {
+    target-margin = target-margin + (left: target-margin.x, right: target-margin.x)
+    let _ = target-margin.remove("x")
+  }
+  assert("left" in target-margin or "inside" in target-margin)
+  let (target-x, target-x-occupy) = if "left" in target-margin {
+    ((left: target-margin.left, right: target-margin.right), target-margin.left + target-margin.right)
+  } else {
+    ((inside: target-margin.inside, outside: target-margin.outside), target-margin.inside + target-margin.outside)
+  }
+  let width = dims.width - _resolve-rel(target-x-occupy, dims.width)
+  let pad-required = (inside: 0pt, outside: 0pt, left: 0pt, right: 0pt)
+  pad-required = pad-required + current-x
+  for (k, v) in pad-required {
+    if k in target-x {
+      let _ = pad-required.insert(k, v - target-x.at(k))
+    }
+  }
+  return (current-y, target-margin, pad-required, width)
 }
 
 #let _is-para-break(u) = type(u) == content and u.func() == parbreak
@@ -87,24 +96,25 @@
   false
 }
 
-#let _no-indent(cont) = {
-  set par(first-line-indent: 0em)
-  cont
-}
-
 #let _columns-width(fields, width) = {
   let count = fields.at("count", default: 2)
   let gutter = _resolve-rel(fields.at("gutter", default: 4%), width)
   (width - (count - 1) * gutter) / count
 }
 
+#let _get-fli() = {
+  let fli = par.first-line-indent
+  let amt = if type(fli) == dictionary { fli.amount } else { fli }
+  let all = type(fli) == dictionary and fli.at("all", default: false)
+  return (amt, all)
+}
+
 // Build the content of one column chunk. Because each chunk is placed in its
 // own isolated box (a grid cell), paragraphs must get their first-line indent
 // explicitly: `columns`/`block`/`grid` do not apply the ambient
 // `first-line-indent` to the first paragraph of their content.
-#let _chunk-content(units, fli, cont, fill-last: false) = {
-  let amt = if type(fli) == dictionary { fli.amount } else { fli }
-  let all = type(fli) == dictionary and fli.at("all", default: false)
+#let _chunk-content(units, cont, fill-last: false) = {
+  let (amt, all) = _get-fli()
   let paras = ()
   let cur = ()
   for u in units {
@@ -147,10 +157,10 @@
 
 // Largest prefix of `units` whose rendered height does not exceed `avail`,
 // found by binary search over the measured prefix heights.
-#let _cut-chunk(units, width, avail, fli, cont) = {
+#let _cut-chunk(units, width, avail, cont) = {
   let n = units.len()
   if n == 0 { return 0 }
-  let h(k) = measure(_chunk-content(units.slice(0, k), fli, cont), width: width).height
+  let h(k) = measure(_chunk-content(units.slice(0, k), cont), width: width).height
   if h(n) <= avail { return n }
   let lo = 0
   let hi = n
@@ -174,7 +184,6 @@
   }
   let count = params.at("count", default: 2)
   let colw = _columns-width(params, width)
-  let fli = par.first-line-indent
   // Fit one column at a time. Each chunk is placed in its own isolated box, so
   // its measured height matches its rendered height; filling every box to the
   // available height keeps the columns flush at the bottom.
@@ -183,7 +192,7 @@
   for i in range(count) {
     if used >= units.len() { break }
     let cont = if i == 0 { false } else { not _ends-block(units.at(used - 1)) }
-    let k = _cut-chunk(units.slice(used), colw, avail, fli, cont)
+    let k = _cut-chunk(units.slice(used), colw, avail, cont)
     if k == 0 { k = 1 }
     counts.push(k)
     used += k
@@ -193,7 +202,7 @@
   for (i, k) in counts.enumerate() {
     let cont = if i == 0 { false } else { not _ends-block(units.at(used - 1)) }
     let fill = used + k < full-units.len() and not _is-para-break(full-units.at(used + k))
-    chunks.push(_chunk-content(units.slice(used, used + k), fli, cont, fill-last: fill))
+    chunks.push(_chunk-content(units.slice(used, used + k), cont, fill-last: fill))
     used += k
   }
   (chunks: chunks, consumed: used)
@@ -209,26 +218,15 @@
   let cells = ()
   for i in range(count) {
     let c = if i < chunks.len() { chunks.at(i) } else { [] }
-    cells.push(block(
-      width: colw,
-      height: cellh,
-      above: 0pt,
-      below: 0pt,
-      inset: 0pt,
-      outset: 0pt,
-      {
-        // Disable the ambient first-line indent; `_chunk-content` controls it
-        // explicitly per paragraph (otherwise paragraphs would be indented
-        // twice, and continuation paragraphs would be indented wrongly).
-        set par(first-line-indent: 0em)
-        c
-      },
-    ))
+    cells.push({
+      // Disable the ambient first-line indent; `_chunk-content` controls it explicitly per paragraph (otherwise paragraphs would be indented twice, and continuation paragraphs would be indented wrongly).
+      set par(first-line-indent: 0em)
+      c
+    })
   }
   let cols = ()
   for i in range(count) { cols.push(colw) }
-  let body = grid(columns: cols, column-gutter: gutter, row-gutter: 0pt, ..cells)
-  let body = block(above: 0pt, below: 0pt, inset: 0pt, outset: 0pt, body)
+  let body = grid(columns: cols, column-gutter: gutter, row-gutter: 0pt, inset: 0pt, ..cells)
   block(
     width: width,
     breakable: true,
@@ -239,10 +237,9 @@
     inset: 0pt,
     outset: 0pt,
     if area == none or reserve <= 0pt { body } else {
-      {
-        body
-        area
-      }
+      body
+      v(1fr, weak: true)
+      area
     },
   )
 }

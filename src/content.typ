@@ -171,6 +171,11 @@
   }
 }
 
+/// Split content into reflowable units. The unit boundaries are the CJK
+/// characters, punctuation and whitespace runs that the flow functions need in
+/// order to break content at the right places.
+///
+/// -> array
 #let _split-units(cont) = {
   if type(cont) == str {
     return _split-string(cont)
@@ -189,15 +194,6 @@
     return _split-wrapper(cont, _split-units)
   }
   (cont,)
-}
-
-/// Split content into reflowable units. The unit boundaries are the CJK
-/// characters, punctuation and whitespace runs that the flow functions need in
-/// order to break content at the right places.
-///
-/// -> array
-#let split-content(cont) = {
-  _split-units(cont)
 }
 
 #let _join(units) = if units.len() == 0 { [] } else { units.join() }

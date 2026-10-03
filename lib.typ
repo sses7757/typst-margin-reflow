@@ -8,4 +8,4 @@
 // margins to an asymmetric (book-style) layout, all without starting a new
 // page.
 
-#import "src/flow.typ": column-flow, single-flow, asymmetric-flow
+#import "src/flow.typ": margin-reflow

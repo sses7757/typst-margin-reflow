@@ -1,395 +1,130 @@
 // The public flow functions.
 
-#import "content.typ": split-content, _join
-#import "geometry.typ": _page-dimensions, _page-margins, _resolve-margins, _page-split, _page-block, _rebuild-columns, _no-indent, _ends-block, _is-para-break
-#import "footnotes.typ": _fn-scan, _fn-rewrite-all, _fn-area
+#import "content.typ": _join, _split-units
+#import "geometry.typ": (
+  _calc-content-dims, _ends-block, _get-fli, _get-padding, _is-para-break, _page-block, _page-split,
+)
+#import "footnotes.typ": _fn-area, _fn-rewrite-all, _fn-scan
 
-/// Reflows `content` into symmetric two-column pages when it begins partway
-/// down an asymmetric page, without starting a new page.
-///
-/// The current page's asymmetric margins are converted to equal margins for the
-/// reflowed region: the columns are widened to the symmetric content width and
-/// shifted into the symmetric position, so the text already occupying the top
-/// of the page is left untouched and the reflowed part runs flush to the
-/// bottom. The remainder of `content` continues on the following pages, whose
-/// margins are also switched to the symmetric values.
-///
-/// Footnotes are pulled out of the flow and laid out manually at the bottom of
-/// the output block, so their entries match the widened columns instead of the
-/// page width; their numbering and `ref`s to them are preserved. When the
-/// content already starts at the top of the page, it is laid out directly in
-/// two columns with symmetric margins.
-///
-/// It is a `context` function, so it inspects the current page geometry and
-/// position itself.
-///
-/// ```typ
-/// #import "@preview/riffle:0.1.0": column-flow
-///
-/// #lorem(60) // occupies the top of the current asymmetric page
-///
-/// #column-flow(
-///   [
-///     第一段内容。#footnote[第一条脚注。]
-///
-///     第二段内容。
-///   ],
-///   gutter: 14pt,
-///   footnote-entry: (indent: 0em, size: 9pt),
-/// )
-/// ```
-/// -> content
-#let column-flow(
-  /// The content to reflow. Paragraph breaks are honored.
-  ///
-  /// Example: a sequence of exercise descriptions and bodies joined with
-  /// `parbreak()`.
-  /// -> content
-  content,
-  /// Named arguments forwarded to the two-column layout.
-  /// Only `count` (int, default `2`) and `gutter` (length, default `4%`,
-  /// relative to the reflow width) are meaningful.
-  ///
-  /// Example: `gutter: 14pt`.
-  /// -> arguments
-  ..columns-args,
-  /// Styling for the manually laid-out footnote entries.
-  /// - `none` (default): use Typst's defaults.
-  /// - dictionary: used as `footnote.entry` configuration (keys such as
-  ///   `indent`, `size`, `leading`, `clearance`, `gap`, `separator`, `style`).
-  /// - function: shorthand for `(style: function)`.
-  ///
-  /// Example: `(indent: 0em, size: 9pt)`.
-  /// -> none | dictionary | function
-  footnote-entry: none,
-) = context {
-  let dims = _page-dimensions()
-  let pos = here().position()
-  let margins = _page-margins(dims)
-  let extra = calc.abs(margins.left - margins.right)
-  let symmetric = calc.min(margins.left, margins.right)
-  let sym-margin = (
-    top: margins.top,
-    bottom: margins.bottom,
-    left: symmetric,
-    right: symmetric,
-  )
-  let params = columns-args.named()
-  if "count" not in params { params.insert("count", 2) }
-  let fn-entry = if footnote-entry == none {
-    (:)
-  } else if type(footnote-entry) == dictionary {
-    footnote-entry
-  } else {
-    (style: footnote-entry)
-  }
-  let at-top = pos.y > 0pt and pos.y <= margins.top + 1pt
-  if at-top {
-    set page(margin: sym-margin)
-    _rebuild-columns(params, content)
-  } else {
-    let units = split-content(content)
-    let width = dims.width - margins.left - margins.right + extra
-    let page-avail = dims.height - margins.bottom - pos.y
-    let base = counter(footnote).get().first()
-    let fns = _fn-scan(units, base)
-    let units-rw = _fn-rewrite-all(units, fns)
-    let reserve = 0pt
-    let limit = none
-    let included = 0
-    let j = 0
-    while j < fns.notes.len() {
-      let gu = fns.unit-of-note.at(j)
-      if gu >= units.len() { break }
-      let h = (
-        measure(
-          _fn-area(fns.notes.slice(0, j + 1), entry: fn-entry),
-          width: width,
-        ).height
-          + 0.5pt
-      )
-      let try = _page-split(params, units-rw, width, page-avail - h)
-      if h < page-avail and try.consumed >= gu + 1 {
-        reserve = h
-        included = j + 1
-        j += 1
-      } else {
-        limit = gu
-        break
-      }
-    }
-    let area = if included > 0 {
-      _fn-area(fns.notes.slice(0, included), entry: fn-entry)
-    } else {
-      none
-    }
-    let r = _page-split(
-      params,
-      units-rw,
-      width,
-      page-avail - reserve,
-      max-units: limit,
-    )
-    let body = r.chunks
-    let consumed = r.consumed
-    let piece = _page-block(params, body, width, page-avail, area: area, reserve: reserve)
-    let padded = if margins.left > margins.right {
-      pad(left: -extra, piece)
-    } else {
-      piece
-    }
-    padded
-    let leftover = units.slice(consumed)
-    let rest-body = if consumed > 0 and leftover.len() > 0 and not _ends-block(units.at(consumed - 1)) {
-      let p = 0
-      while p < leftover.len() and not _is-para-break(leftover.at(p)) { p += 1 }
-      _no-indent(_join(leftover.slice(0, p))) + _join(leftover.slice(p))
-    } else {
-      _join(leftover)
-    }
-    // Switch the margins for the following pages without forcing a break: the
-    // reflowed block already fills the page, so the remainder flows onto the
-    // next page naturally, and nothing is emitted when everything fit.
-    set page(margin: sym-margin)
-    if leftover.len() > 0 { _rebuild-columns(params, rest-body) }
+#let _no-indent(cont) = {
+  set par(first-line-indent: 0em)
+  cont
+}
+
+#let _rebuild-columns(fields, body) = {
+  let count = if "count" in fields { fields.remove("count") } else { 2 }
+  if count == 2 { columns(count, body, ..fields) } else {
+    body
   }
 }
 
-/// Single-column counterpart of `column-flow`. Reflows `content` into a
-/// symmetric page when it begins partway down an asymmetric page, without
-/// starting a new page: the single column spans the entire symmetric content
-/// width, and the remainder continues on the following symmetric pages.
+/// Reflows `content` into (a)symmetric one- or two-column pages when it begins partway down an (a)symmetric page, without starting a new page.
 ///
-/// It reuses `column-flow`'s splitting, page-fitting and footnote machinery:
-/// passing `count: 1` already produces one full-width column, and the shared
-/// helpers compensate the asymmetric margins the same way. Unlike
-/// `column-flow`, the continuing flow is emitted unwrapped, so no `columns`
-/// element (and its first-line-indent quirk) is introduced. When the content
-/// already starts at the top of the page, it is laid out directly with
-/// symmetric margins.
+/// The current page's margin are converted to the given margin for the reflowed region.
 ///
-/// It is a `context` function, so it inspects the current page geometry and
-/// position itself.
+/// Footnotes are pulled out of the flow and laid out manually at the bottom of the output block, so their entries match the reflowed content instead of the page width; their numbering and `ref`s to them are preserved.
 ///
+/// It is a `context` function, and it inspects the current page geometry and position itself.
+///
+/// == Example
 /// ```typ
-/// #import "@preview/riffle:0.1.0": single-flow
+/// #import "@preview/riffle:0.2.0": margin-reflow
 ///
 /// #lorem(60) // occupies the top of the current asymmetric page
 ///
-/// #single-flow(
-///   [
-///     第一段内容。#footnote[第一条脚注。]
-///
-///     第二段内容。
-///   ],
+/// #margin-reflow(
+///   columns: (count: 2, gutter: 14pt),
 ///   footnote-entry: (indent: 0em, size: 9pt),
-/// )
+/// )[
+///   #lorem(20)#footnote[some footnote]
+///
+///   #lorem(40)
+/// ],
 /// ```
 /// -> content
-#let single-flow(
+#let margin-reflow(
   /// The content to reflow. Paragraph breaks are honored.
   ///
   /// Example: a long sequence of paragraphs.
   /// -> content
   content,
-  /// Styling for the manually laid-out footnote entries, identical to
-  /// `column-flow`'s parameter.
-  /// - `none` (default): use Typst's defaults.
-  /// - dictionary: used as `footnote.entry` configuration.
-  /// - function: shorthand for `(style: function)`.
+  /// Named arguments forwarded to the column layout. Only `count` (int, default `2`) and `gutter` (length, default `4%`, relative to the reflow width) are meaningful.
   ///
-  /// Example: `(indent: 0em, size: 9pt)`.
-  /// -> none | dictionary | function
-  footnote-entry: none,
-) = context {
-  let dims = _page-dimensions()
-  let pos = here().position()
-  let margins = _page-margins(dims)
-  let extra = calc.abs(margins.left - margins.right)
-  let symmetric = calc.min(margins.left, margins.right)
-  let sym-margin = (
-    top: margins.top,
-    bottom: margins.bottom,
-    left: symmetric,
-    right: symmetric,
-  )
-  // `_page-split` and `_page-block` read the column count from `params`.
-  let params = (count: 1)
-  let fn-entry = if footnote-entry == none {
-    (:)
-  } else if type(footnote-entry) == dictionary {
-    footnote-entry
-  } else {
-    (style: footnote-entry)
-  }
-  let at-top = pos.y > 0pt and pos.y <= margins.top + 1pt
-  if at-top {
-    set page(margin: sym-margin)
-    content
-  } else {
-    let units = split-content(content)
-    // Width of the symmetric page's content area: the asymmetric margins are
-    // compensated by `extra`, so the block spans `symmetric` on both sides.
-    let width = dims.width - margins.left - margins.right + extra
-    let page-avail = dims.height - margins.bottom - pos.y
-    let base = counter(footnote).get().first()
-    let fns = _fn-scan(units, base)
-    let units-rw = _fn-rewrite-all(units, fns)
-    let reserve = 0pt
-    let limit = none
-    let included = 0
-    let j = 0
-    while j < fns.notes.len() {
-      let gu = fns.unit-of-note.at(j)
-      if gu >= units.len() { break }
-      let h = (
-        measure(
-          _fn-area(fns.notes.slice(0, j + 1), entry: fn-entry),
-          width: width,
-        ).height
-          + 0.5pt
-      )
-      let try = _page-split(params, units-rw, width, page-avail - h)
-      if h < page-avail and try.consumed >= gu + 1 {
-        reserve = h
-        included = j + 1
-        j += 1
-      } else {
-        limit = gu
-        break
-      }
-    }
-    let area = if included > 0 {
-      _fn-area(fns.notes.slice(0, included), entry: fn-entry)
-    } else {
-      none
-    }
-    let r = _page-split(
-      params,
-      units-rw,
-      width,
-      page-avail - reserve,
-      max-units: limit,
-    )
-    let body = r.chunks
-    let consumed = r.consumed
-    let piece = _page-block(params, body, width, page-avail, area: area, reserve: reserve)
-    let padded = if margins.left > margins.right {
-      pad(left: -extra, piece)
-    } else {
-      piece
-    }
-    padded
-    let leftover = units.slice(consumed)
-    let rest-body = if consumed > 0 and leftover.len() > 0 and not _ends-block(units.at(consumed - 1)) {
-      let p = 0
-      while p < leftover.len() and not _is-para-break(leftover.at(p)) { p += 1 }
-      _no-indent(_join(leftover.slice(0, p))) + _join(leftover.slice(p))
-    } else {
-      _join(leftover)
-    }
-    // Switch the margins for the following pages without forcing a break: the
-    // reflowed block already fills the page, so the remainder flows onto the
-    // next page naturally, and nothing is emitted when everything fit.
-    set page(margin: sym-margin)
-    rest-body
-  }
-}
-
-/// Reflows `content` into asymmetric margins when it begins partway down a page
-/// that currently uses (typically symmetric) margins, without starting a new
-/// page. The single column spans the entire asymmetric content area defined by
-/// `margin`, and the remainder continues on the following pages, which are also
-/// switched to that margin.
-///
-/// This is the reverse of `single-flow`: it is meant to return to an asymmetric
-/// (book-style, wide outer margin) layout after a stretch of content that was
-/// set with symmetric margins. Only the horizontal margins are taken from
-/// `margin`; the top and bottom margins of the current page are preserved and
-/// carried over to the following pages.
-///
-/// Footnotes are handled like in `column-flow` and `single-flow`. It is a
-/// `context` function, so it inspects the current page geometry and position
-/// itself.
-///
-/// ```typ
-/// #import "@preview/riffle:0.1.0": asymmetric-flow
-///
-/// #asymmetric-flow(
-///   [
-///     第一段内容。#footnote[第一条脚注。]
-///
-///     第二段内容。
-///   ],
-///   (inside: 1.75cm, outside: 6.45cm),
-///   footnote-entry: (indent: 0em, size: 9pt),
-/// )
-/// ```
-/// -> content
-#let asymmetric-flow(
-  /// The content to reflow. Paragraph breaks are honored.
-  ///
-  /// Example: a long sequence of paragraphs.
-  /// -> content
-  content,
-  /// The asymmetric (horizontal) margin to switch to, given as a page-margin
-  /// dictionary such as `(inside: 1cm, outside: 3cm)` or
-  /// `(left: 1cm, right: 3cm)`. `inside`/`outside` are resolved against the
-  /// current page parity, like `page.margin`. A plain length or `auto` is also
-  /// accepted and yields equal left/right margins. The top and bottom margins
-  /// are always taken from the current page.
+  /// Example: `(count: 2, gutter: 14pt)`.
+  /// -> dictionary
+  columns: (count: 1, gutter: 4%),
+  /// - The asymmetric (horizontal) margin to switch to, given as a page-margin dictionary such as `(inside: 1cm, outside: 3cm)` or `(left: 1cm, right: 3cm)`.
+  /// - A plain length is also accepted and yields equal left/right margins. The top and bottom margins are always taken from the current page and thus ignored in this dictionary.
+  /// - A string value of "symmetric" indicating symmetric margin with inside & outside set to the minimal of both.
+  /// - You may also use `auto` (default value) to inherit the current margin.
   ///
   /// Example: `(inside: 2cm, outside: 4cm)`.
-  /// -> auto | length | dictionary
-  margin,
-  /// Styling for the manually laid-out footnote entries, identical to
-  /// `column-flow`'s parameter.
+  /// -> auto | length | dictionary | "symmetric"
+  margin: auto,
+  /// Styling for the manually laid-out footnote entries.
+  /// - `none` (default): use Typst's defaults.
+  /// - dictionary: used as `footnote.entry` configuration (keys such as `indent`, `size`, `leading`, `clearance`, `gap`, `separator`, `style`).
+  /// - function: shorthand for `(style: function)`.
+  ///
+  /// Example: `(indent: 0em, size: 9pt)`.
   /// -> none | dictionary | function
   footnote-entry: none,
+  /// Whether to set the page margin staring from the second page (or the first one if it is on the start of a page) or not.
+  /// - `true` (default): use scpoced `set page(...)`, resulting in trailing pagebreak while simplifies the reflow by far.
+  /// - `false`: use no `set page(...)` and reflow *every* page. May be slow in first compilation.
+  ///
+  /// Example: `false`.
+  /// -> bool
+  set-page-margin: true,
 ) = context {
-  let dims = _page-dimensions()
-  let pos = here().position()
-  let current = _page-margins(dims)
-  // Only the horizontal margins are taken from `margin`; vertical margins
-  // follow the current page so a mid-page switch does not move the baseline
-  // grid of the following pages.
-  let target-margin = if type(margin) == dictionary {
-    let horizontal = (:)
-    for key in ("left", "right", "inside", "outside", "x") {
-      if key in margin { horizontal.insert(key, margin.at(key)) }
-    }
-    (top: current.top, bottom: current.bottom) + horizontal
-  } else {
-    (top: current.top, bottom: current.bottom, x: margin)
+  // check use condition
+  assert(type(page.height) == length and type(page.width) == length, message: "page dimension cannot be auto")
+  if "inside" in page.margin {
+    assert("outside" in page.margin, message: "page margin should have both inside & outside or none")
+  } else if "left" in page.margin {
+    assert("right" in page.margin, message: "page margin should have both left & right or none")
   }
-  let target = _resolve-margins(target-margin, dims, here().page())
-  let params = (count: 1)
+
+  // check arguments
+  assert(type(columns) == dictionary, message: "columns should be a dictionary")
+  let column-params = columns
+  if "count" not in column-params { column-params.insert("count", 1) }
   let fn-entry = if footnote-entry == none {
     (:)
   } else if type(footnote-entry) == dictionary {
     footnote-entry
-  } else {
+  } else if type(footnote-entry) == function {
     (style: footnote-entry)
-  }
-  let at-top = pos.y > 0pt and pos.y <= current.top + 1pt
-  if at-top {
-    set page(margin: target-margin)
-    content
   } else {
-    let units = split-content(content)
-    // The single column spans the whole asymmetric content area.
-    let width = dims.width - target.left - target.right
-    let page-avail = dims.height - current.bottom - pos.y
-    let base = counter(footnote).get().first()
-    let fns = _fn-scan(units, base)
-    let units-rw = _fn-rewrite-all(units, fns)
+    panic("footnote-entry is of unexptected type")
+  }
+
+  // get page dim
+  let dims = (width: page.width, height: page.height)
+  let pos = here().position()
+  let (current-y, target-margin, pad-required, width) = _calc-content-dims(margin)
+  let at-top = pos.y > 0pt and pos.y <= current-y.top + 1pt
+
+  // special case 1: at top & set page
+  if at-top and set-page-margin {
+    return {
+      set page(margin: target-margin)
+      _rebuild-columns(column-params, content)
+    }
+  }
+
+  // define split page function
+  let split-one-page(units-ori, avail-y, pn, fn-base) = {
+    let fns = _fn-scan(units-ori, fn-base)
+    let units-rw = _fn-rewrite-all(units-ori, fns)
     let reserve = 0pt
     let limit = none
     let included = 0
     let j = 0
+    // find suitable footnote(s)
     while j < fns.notes.len() {
       let gu = fns.unit-of-note.at(j)
-      if gu >= units.len() { break }
+      if gu >= units-ori.len() { break }
       let h = (
         measure(
           _fn-area(fns.notes.slice(0, j + 1), entry: fn-entry),
@@ -397,8 +132,8 @@
         ).height
           + 0.5pt
       )
-      let try = _page-split(params, units-rw, width, page-avail - h)
-      if h < page-avail and try.consumed >= gu + 1 {
+      let try = _page-split(column-params, units-rw, width, avail-y - h)
+      if h < avail-y and try.consumed >= gu + 1 {
         reserve = h
         included = j + 1
         j += 1
@@ -412,32 +147,79 @@
     } else {
       none
     }
+    // split page and compose page body with footnote
     let r = _page-split(
-      params,
+      column-params,
       units-rw,
       width,
-      page-avail - reserve,
+      avail-y - reserve,
       max-units: limit,
     )
     let body = r.chunks
     let consumed = r.consumed
-    let piece = _page-block(params, body, width, page-avail, area: area, reserve: reserve)
-    // Shift the block from the current content start to the asymmetric start.
-    let shift = target.left - current.left
-    let padded = if shift == 0pt { piece } else { pad(left: shift, piece) }
-    padded
-    let leftover = units.slice(consumed)
-    let rest-body = if consumed > 0 and leftover.len() > 0 and not _ends-block(units.at(consumed - 1)) {
-      let p = 0
-      while p < leftover.len() and not _is-para-break(leftover.at(p)) { p += 1 }
-      _no-indent(_join(leftover.slice(0, p))) + _join(leftover.slice(p))
+    body = _get-padding(pad-required, pn)(_page-block(
+      column-params,
+      body,
+      width,
+      avail-y,
+      area: area,
+      reserve: reserve,
+    ))
+    // remove first line indent if necessary and return
+    let (amt, all) = _get-fli()
+    if (
+      consumed > 0 and units-ori.len() > consumed and not _ends-block(units-ori.at(consumed - 1)) and all and amt != 0pt
+    ) {
+      units-ori = (h(-amt),) + units-ori.slice(consumed)
     } else {
-      _join(leftover)
+      units-ori = units-ori.slice(consumed)
     }
-    // Switch the margins for the following pages without forcing a break: the
-    // reflowed block already fills the page, so the remainder flows onto the
-    // next page naturally, and nothing is emitted when everything fit.
-    set page(margin: target-margin)
-    rest-body
+    return (body, units-ori, included)
+  }
+
+  // start reflow for first page
+  let ori-units = _split-units(content)
+  let page-avail = dims.height - current-y.bottom - pos.y
+  let page-num = here().page()
+  let footnote-base = counter(footnote).get().first()
+  let (page-body, left-units, footnote-included) = split-one-page(ori-units, page-avail, page-num, footnote-base)
+
+  // special case 2: set page
+  if set-page-margin {
+    return {
+      page-body
+      if left-units.len() > 0 {
+        set page(margin: target-margin)
+        _rebuild-columns(column-params, _join(left-units))
+      }
+    }
+  }
+
+  // otherwise, reflow middle pages
+  let _get-page-parts(p) = if "children" in p.body.body.fields() and p.body.body.children.len() > 2 {
+      (p.body.body.children.at(0), p.body.body.children.slice(2).join())
+    } else {
+      (p.body.body, [])
+    }
+  let (page-main, page-footer) = _get-page-parts(page-body)
+  let page-y = measure(page-main, width: width).height + measure(page-footer, width: width).height
+  while page-y >= page-avail - text.size {
+    page-body // print current page
+    page-num += 1 // increase page number
+    footnote-base += footnote-included
+    page-avail = dims.height - current-y.top - current-y.bottom
+    (page-body, left-units, footnote-included) = split-one-page(left-units, page-avail, page-num, footnote-base)
+    (page-main, page-footer) = _get-page-parts(page-body)
+    page-y = measure(page-main, width: width).height + measure(page-footer, width: width).height
+  }
+
+  // reflow last page
+  // TODO: use figure(placement: bottom) for the last footnotes if necessary?
+  let (last-main, last-footer) = _get-page-parts(page-body)
+  let last-page-setting = page-body.fields()
+  let _ = last-page-setting.remove("body")
+  pad(..last-page-setting, last-main) // print last main text
+  if last-footer != [] {
+    figure(caption: none, gap: 0pt, kind: "footnote", numbering: none, placement: bottom, scope: "parent", supplement: none, outlined: false, align(start, last-footer))
   }
 }
